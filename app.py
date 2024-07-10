@@ -6,6 +6,7 @@ from uuid import uuid4
 from datetime import datetime
 import os, json
 from flask_cors import CORS
+from typing import List, Dict, Union
 
 load_dotenv()
 
@@ -40,20 +41,26 @@ def get_db_connection():
         print(f'Error connecting to MySQL: {e}')
         return None
 
-def get_Patient_NameAndId(Name: str):
+def get_Patient_NameAndId(Name: str, DoctorId: str):
     """ description:
-            For getting patientId by patient's name call this function
+            For getting patientId by patient's name call this function. Use this PatientId to make prescription
+            and anywhere necessary.
         parameters:
          Name(str): the patient name through which to get PatientId 
+         DoctorId(str): The ID of the doctor to fetch patients for. Get this from chat history
+        
+        returns:
+            String: A string with patientId and name
     """
+    print(Name)
     conn= get_db_connection()
     cursor= conn.cursor()
-    cursor.execute("SELECT PatientId, Name FROM tbl_patient WHERE name = %s", (Name, ))
+    cursor.execute("SELECT PatientId, Name FROM tbl_patient WHERE Name = %s AND DoctorId = %s ", (Name, DoctorId, ))
     rows= cursor.fetchall()
     cursor.close()
     conn.close()
     print("get_Patient_NameAndId: ",str(rows))
-    return str(rows)
+    return f" patientId and name: {rows}"
 
 def see_all_patients(DoctorID: str):
     """
@@ -153,7 +160,7 @@ def add_appointment(PatientID: str, AppointmentDateTime: str, Status: str, Notes
             cursor.close()
             conn.close()
             print(values)
-            return f"Added Successfully. {AppointmentDateTime}, {Status}"
+            return f"Added Successfully. AppointmentId:{AppointmentID} {AppointmentDateTime}, {Status}"
         else:
             print("Unable to connect to MySQL")
             return False
@@ -163,7 +170,8 @@ def add_appointment(PatientID: str, AppointmentDateTime: str, Status: str, Notes
 
 def all_appointments(DoctorID: str):
     """
-    Retrieves all appointments for a given DoctorID from the database.
+    Retrieves all appointments for a given DoctorID from the database. Use these data to reveal  
+     previous appointments in accordance with date for the query response.
     
     Parameters:
     - DoctorID (str): The ID of the doctor to fetch appointments for.
@@ -175,12 +183,12 @@ def all_appointments(DoctorID: str):
         conn = get_db_connection()
         if conn:
             cursor = conn.cursor()
-            query = "SELECT p.Name, a.* FROM tbl_patients p INNER JOIN tbl_appointments a ON p.PatientID = a.PatientID WHERE p.DoctorID = %s ORDER BY a.AppointmentDateTime DESC"
+            query = "SELECT p.Name, a.AppointmentDateTime ,a.Status, a.Notes FROM tbl_patients p INNER JOIN tbl_appointments a ON p.PatientID = a.PatientID WHERE p.DoctorID = %s ORDER BY a.AppointmentDateTime DESC"
             cursor.execute(query, (DoctorID,))
             rows = cursor.fetchall()
             cursor.close()
             conn.close()
-            return rows
+            return f"appointments: {rows}"
         else:
             print("Unable to connect to MySQL")
             return None
@@ -188,55 +196,99 @@ def all_appointments(DoctorID: str):
         print(f"Error fetching appointments: {e}")
         return None
 
-def make_prescription(PatientID: str, PrescriptionData: list, Instructions: str, PrescriptionNotes: str, DoctorID: str):
+def get_future_appointments(DoctorID:str):
     """
-    Adds a new prescription to the database.
+    Retrieves future appointments for a given DoctorID from the database.
+
+    Parameters:
+    DoctorID (int): The ID of the doctor.
+
+    Returns:
+    String : List of future appointment records.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        query = """
+        SELECT *
+        FROM tbl_appointments
+        WHERE DoctorID = %s AND AppointmentDateTime > %s
+        ORDER BY AppointmentDateTime
+        """
+        cursor.execute(query, (DoctorID, current_datetime))
+        future_appointments = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        return f"Future appointments: {future_appointments}"
+
+    except mysql.connector.Error as err:
+        print("Error retrieving future appointments:", err)
+        return "Error"
+
+#AllowedType = Union[int, float, bool, str, List['AllowedType'], Dict[str, 'AllowedType']]
+def make_prescription(PatientID: str, MedicationName: str,Dosage:str,Frequency:str, Duration:str, Status:str, Instructions: str, PrescriptionNotes: str, DoctorID: str) ->str:
+    """
+    Adds a new prescription to the database. For medicine ask user to specify 'MedicationName',
+                    'Dosage',
+                    'Frequency',
+                    'Duration',
+                    'Status',
     
     Parameters:
     - PatientID (str): ID of the patient for whom the prescription is being made.
-    - PrescriptionData (list): List of dictionaries containing medication details.
+    - MedicationName (str): Name of the medication.
+    - Dosage (str): Dosage amount and unit (e.g., '500mg', '1 tablet').
+    - Frequency (str): Frequency of taking the medication (e.g., 'Twice daily', 'Once a day').
+    - Duration (str): Duration of the prescription (e.g., '5 days', '2 weeks').
+    - Status (str): Status of the prescription (e.g., 'Active', 'Inactive').
     - Instructions (str): Instructions related to the prescription.
     - PrescriptionNotes (str): Additional notes related to the prescription.
-    - DoctorID (str): The ID of the doctor making the prescription.
+    - DoctorID (str): ID of the doctor making the prescription got from the chat history.
     
     Returns:
-    - bool: True if the prescription was added successfully, False otherwise.
+    - string: The list of prescription with necessary details
     """
     try:
         conn = get_db_connection()
         if conn:
             cursor = conn.cursor()
-            date_issued = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            prescription_id = str(uuid4())
-            
-            prescription_values = []
-            for dose in PrescriptionData:
-                prescription_values.append((
-                    prescription_id,
-                    PatientID,
-                    DoctorID,
-                    date_issued,
-                    dose['MedicationName'],
-                    dose['Dosage'],
-                    dose['Frequency'],
-                    dose['Duration'],
-                    dose['Status'],
-                    Instructions,
-                    PrescriptionNotes
-                ))
+            Date_Issued = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            prescription_id = str(uuid4()).replace('-',"")[:30]
+            print(prescription_id)
+           # prescription_values = []
+            #for dose in PrescriptionData:
+            #    prescription_values.append((
+            #        prescription_id,
+            #        PatientID,
+            #        DoctorID,
+            #        date_issued,
+            #        dose['MedicationName'],
+            #        dose['Dosage'],
+            #        dose['Frequency'],
+            #        dose['Duration'],
+            #        dose['Status'],
+            #        Instructions,
+            #    PrescriptionNotes
+            # ))
             
             query = "INSERT INTO tbl_prescription (PrescriptionID, PatientID, DoctorID, DateIssued, MedicationName, Dosage, Frequency, Duration, Status, Instructions, PrescriptionNotes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
-            cursor.executemany(query, prescription_values)
+            cursor.execute(query, ( prescription_id ,PatientID, DoctorID, Date_Issued, MedicationName, Dosage, Frequency, Duration, Status, Instructions, PrescriptionNotes,))
+            rows = cursor.fetchall()
             conn.commit()
             cursor.close()
             conn.close()
-            return True
+            print(prescription_id ,PatientID, DoctorID, Date_Issued, MedicationName, Dosage, Frequency, Duration, Status, Instructions, PrescriptionNotes)
+            return f"Added prescription with values: {rows}"
         else:
             print("Unable to connect to MySQL")
-            return False
+            return "Error"
     except Exception as e:
         print(f"Error making prescription: {e}")
-        return False
+        return "Could not make"
 
 def all_prescriptions(DoctorID: str):
     """
@@ -265,9 +317,10 @@ def all_prescriptions(DoctorID: str):
         print(f"Error fetching prescriptions: {e}")
         return None
 
-def update_appointment(AppointmentID: str, Notes: str, Status: str):
+def update_appointment(AppointmentID: str,  Status: str):
     """
-    Updates an existing appointment in the database.
+    Updates an existing appointment in the database. 
+    And for AppointmentID do not ask the user for it instead, get it using AppointmentsToday for a patient function to update
     
     Parameters:
     - AppointmentID (str): ID of the appointment to update.
@@ -275,27 +328,27 @@ def update_appointment(AppointmentID: str, Notes: str, Status: str):
     - Status (str): Updated status of the appointment.
     
     Returns:
-    - bool: True if the appointment was updated successfully, False otherwise.
+    - Sring: Detalis of what update was made
     """
     try:
         conn = get_db_connection()
         if conn:
             cursor = conn.cursor()
-            query = "UPDATE tbl_appointments SET Notes = %s, Status = %s WHERE AppointmentID = %s"
-            values = (Notes, Status, AppointmentID)
+            query = "UPDATE tbl_appointments SET  Status = %s WHERE AppointmentID = %s"
+            values = (Status, AppointmentID,)
             cursor.execute(query, values)
             conn.commit()
             cursor.close()
             conn.close()
-            return True
+            return f"Status updated to {Status}"
         else:
             print("Unable to connect to MySQL")
-            return False
+            return "Error"
     except Exception as e:
         print(f"Error updating appointment: {e}")
-        return False
+        return "Error"
 
-def seeAllPatients(DoctorID: str, PatientId:str, PatientAge:int, PatientAddress: str, PatientEmail: str, PatientPhone:str):
+#def seeAllPatients(DoctorID: str, PatientId:str, PatientAge:int, PatientAddress: str, PatientEmail: str, PatientPhone:str):
     
     print("Doctorid : ", DoctorID)
    
@@ -311,14 +364,117 @@ def seeAllPatients(DoctorID: str, PatientId:str, PatientAge:int, PatientAddress:
    
     return str(rows)
 
+
+def AppointmentsToday(DoctorID:str):
+    """
+    Fetch appointments for today for the doctor. Also use the appointmentId from here to update the Appoinement of a patient.
+    
+    Parameters:
+    DoctorID (str): The ID of the doctor.
+    
+    Returns:
+    String: List of appointment records.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = """
+        SELECT p.Name, p.Address, p.Age, a.*
+        FROM tbl_patients p
+        INNER JOIN tbl_appointments AS a ON p.PatientID = a.PatientID
+        WHERE p.DoctorID = %s AND DATE(a.AppointmentDateTime) = CURDATE()
+        """
+        cursor.execute(query, (DoctorID,))
+        rows = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return f" today's appointments are: {rows}"
+    
+    except mysql.connector.Error as err:
+        print("Error getting appointments:", err)
+        return "Error"
+
+
+def PatientsRange(DoctorID: str):
+    """
+    Count patients in different age ranges for statistical data.
+    
+    Parameters:
+    DoctorID (int): The ID of the doctor.
+    
+    Returns:
+    String : List of age range counts.
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = """
+        SELECT 
+            COUNT(*) as count,
+            CASE
+                WHEN age BETWEEN 0 AND 12 THEN 'Infants and Children'
+                WHEN age BETWEEN 13 AND 18 THEN 'Adolescents'
+                WHEN age BETWEEN 19 AND 30 THEN 'Young Adults'
+                WHEN age BETWEEN 31 AND 50 THEN 'Adults'
+                WHEN age BETWEEN 51 AND 65 THEN 'Middle-Aged Adults'
+                WHEN age BETWEEN 66 AND 80 THEN 'Seniors'
+                ELSE 'Elderly'
+            END as age_range
+        FROM 
+            tbl_patients WHERE DoctorID = %s
+        GROUP BY 
+            CASE
+                WHEN age BETWEEN 0 AND 12 THEN 'Infants and Children'
+                WHEN age BETWEEN 13 AND 18 THEN 'Adolescents'
+                WHEN age BETWEEN 19 AND 30 THEN 'Young Adults'
+                WHEN age BETWEEN 31 AND 50 THEN 'Adults'
+                WHEN age BETWEEN 51 AND 65 THEN 'Middle-Aged Adults'
+                WHEN age BETWEEN 66 AND 80 THEN 'Seniors'
+                ELSE 'Elderly'
+            END
+        ORDER BY 
+            age_range
+        """
+        cursor.execute(query, (DoctorID,))
+        rows = cursor.fetchall()
+        
+        cursor.close()
+        conn.close()
+        
+        return f"statistical data on patients: {rows}"
+    
+    except mysql.connector.Error as err:
+        print("Error counting patients:", err)
+        return None
+
+
+def get_current_datetime(Data:str):
+    """
+    Returns the current date and time. Use this date for to determine future and past dates and use the date
+    for getting any patient data related to date, if the user asks.
+    
+    Returns:
+    str: Formatted current date and time string.
+    """
+    return f"current date time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+
 def getWearher(weather: str):
            """ To get the current weather """
            #print(doctor)
            return '34 degree'
  
 
+
+
+
 model= genai.GenerativeModel(model_name='gemini-1.5-flash',
-                             tools=[see_all_patients,add_appointment,add_patient, getWearher])
+                             system_instruction="Your name is Gemi an AI assistant for MyChamber application",
+                             tools=[see_all_patients,add_appointment, all_appointments, get_future_appointments, AppointmentsToday, update_appointment, add_patient, make_prescription,PatientsRange,get_current_datetime, getWearher])
 chat_history=[]      
 
 @app.route('/api/chat' , methods=['POST'])
@@ -334,8 +490,7 @@ def ChatController():
             "role": "user",
             "parts": [
                 {"text": prompt},
-                {"text": "You are an AI assistant of MyChamber application"},
-                {"text": "Mychamber is a application for doctor to manage their chamber"},
+                {"text": "Mychamber is an application for doctor to manage their chamber"},
                 {"text": f"currently you are serving a doctor called {req['doctor']['Name']} and his other informations are {str(json.dumps(req['doctor']))} "}
             ]
         })
@@ -345,7 +500,7 @@ def ChatController():
         response= chat.send_message(prompt)
         print(req['doctor']['Name'])
         return jsonify(
-            response.text
+            response.text.replace("**","")
             )
     except Exception as e:
         return jsonify({'error': str(e)})
