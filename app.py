@@ -6,6 +6,8 @@ from uuid import uuid4
 from datetime import datetime
 import os, json
 from flask_cors import CORS
+import smtplib
+
 from typing import List, Dict, Union
 
 load_dotenv()
@@ -41,26 +43,48 @@ def get_db_connection():
         print(f'Error connecting to MySQL: {e}')
         return None
 
-def get_Patient_NameAndId(Name: str, DoctorId: str):
-    """ description:
-            For getting patientId by patient's name call this function. Use this PatientId to make prescription
-            and anywhere necessary.
-        parameters:
-         Name(str): the patient name through which to get PatientId 
-         DoctorId(str): The ID of the doctor to fetch patients for. Get this from chat history
+def get_Patient_Name_Id(PatientName: str, DoctorId: str)->str:
+    """ 
+    description:
+            For getting patientId for a given name .Use this PatientId to make prescription
+            or appointment or sending email or anywhere necessary.
+            
+    Parameters:
+         PatientName(str): the patient name through which to get PatientId 
+         DoctorId(str): The ID of the doctor to fetch patients for. Get this from chat history.
         
-        returns:
-            String: A string with patientId and name
+    Returns:
+           - String: A string with patientId and name
     """
-    print(Name)
-    conn= get_db_connection()
-    cursor= conn.cursor()
-    cursor.execute("SELECT PatientId, Name FROM tbl_patient WHERE Name = %s AND DoctorId = %s ", (Name, DoctorId, ))
-    rows= cursor.fetchall()
-    cursor.close()
-    conn.close()
-    print("get_Patient_NameAndId: ",str(rows))
-    return f" patientId and name: {rows}"
+    #print(PatientName)
+    try:
+         conn= mysql.connector.connect(**db_config)
+         if conn: 
+             cursor= conn.cursor(dictionary=True)
+             query = "SELECT PatientId, Name, Email FROM tbl_patients WHERE LOWER(Name) LIKE LOWER(%s) AND DoctorId = %s"
+             cursor.execute(query, (str(PatientName), str(DoctorId), ))
+             rows = cursor.fetchall()
+            
+             cursor.close()
+             conn.close()
+            
+             if rows:
+                
+                res= str(json.dumps(rows)).replace("[","'").replace("]","'")
+                print(res)
+                #json.dumps(str(result))
+                return res
+             else:
+                 print("Error getting Id")
+                 return "Patient not found"
+         else:
+            print("Unable to connect to MySQL")
+            return "Error"
+    except Exception as e:
+        print(f"Error fetching patients: {e}")
+        return "Error"
+    
+    
 
 def see_all_patients(DoctorID: str):
     """
@@ -86,10 +110,10 @@ def see_all_patients(DoctorID: str):
             return str(rows)
         else:
             print("Unable to connect to MySQL")
-            return None
+            return "Error"
     except Exception as e:
         print(f"Error fetching patients: {e}")
-        return None
+        return "Error"
 
 def add_patient(Name: str, DateOfBirth: str, Phone: str, Email: str, Address: str, DoctorID: str):
     #print(DateOfBirth)
@@ -211,10 +235,12 @@ def get_future_appointments(DoctorID:str):
         cursor = conn.cursor(dictionary=True)
 
         current_datetime = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        #print(current_datetime)
         query = """
-        SELECT *
-        FROM tbl_appointments
-        WHERE DoctorID = %s AND AppointmentDateTime > %s
+        SELECT p.Name, p.Email, p.PatientId, a.AppointmentDateTime 
+        FROM tbl_patients p
+        INNER JOIN tbl_appointments AS a ON p.PatientID = a.PatientID
+        WHERE p.DoctorID = %s AND a.AppointmentDateTime > %s
         ORDER BY AppointmentDateTime
         """
         cursor.execute(query, (DoctorID, current_datetime))
@@ -380,7 +406,7 @@ def AppointmentsToday(DoctorID:str):
         cursor = conn.cursor(dictionary=True)
         
         query = """
-        SELECT p.Name, p.Address, p.Age, a.*
+        SELECT p.Name, p.Address, p.Age, p.Email a.*
         FROM tbl_patients p
         INNER JOIN tbl_appointments AS a ON p.PatientID = a.PatientID
         WHERE p.DoctorID = %s AND DATE(a.AppointmentDateTime) = CURDATE()
@@ -403,7 +429,7 @@ def PatientsRange(DoctorID: str):
     Count patients in different age ranges for statistical data.
     
     Parameters:
-    DoctorID (int): The ID of the doctor.
+    DoctorID (str): The ID of the doctor.
     
     Returns:
     String : List of age range counts.
@@ -452,6 +478,42 @@ def PatientsRange(DoctorID: str):
         return None
 
 
+
+
+
+
+def Send_Email(EmailAddress:str, EmailDescription:str):
+    """
+     Send email to user.
+    Parameters:
+    EmailAddress (str): python List of Patient Email address. Emails should be in this format ["test@gmail.com"] wrapped no extra symbol.
+    EmailDescription (str):A suitable description
+    Returns:
+    String : Confirmation if the email has been sent or not
+    
+    """
+    try:
+        print("Emails:", EmailAddress)
+        print("Descrip: ", EmailDescription)
+        s = smtplib.SMTP('smtp.gmail.com', 25)  # Replace with your SMTP server and port
+        s.starttls()
+        sender_email= os.getenv("sender_email")
+        sender_email_pass= os.getenv("sender_email_Pass")
+        s.login(sender_email, sender_email_pass)
+        
+        for dest in EmailAddress:
+            print("Email sent to:", dest)
+            s.sendmail(sender_email, dest, str(EmailDescription))
+            
+        
+        s.quit()
+        return "Message sent"
+    
+    except Exception as e:
+        print("Error sending email:", str(e))
+        return "Message not sent"
+
+
 def get_current_datetime(Data:str):
     """
     Returns the current date and time. Use this date for to determine future and past dates and use the date
@@ -474,7 +536,10 @@ def getWearher(weather: str):
 
 model= genai.GenerativeModel(model_name='gemini-1.5-flash',
                              system_instruction="Your name is Gemi an AI assistant for MyChamber application",
-                             tools=[see_all_patients,add_appointment, all_appointments, get_future_appointments, AppointmentsToday, update_appointment, add_patient, make_prescription,PatientsRange,get_current_datetime, getWearher])
+                             tools=[see_all_patients, add_appointment, all_appointments, get_future_appointments,
+                                    AppointmentsToday, update_appointment, add_patient, make_prescription,
+                                    PatientsRange, get_Patient_Name_Id,get_current_datetime, Send_Email,
+                                    getWearher])
 chat_history=[]      
 
 @app.route('/api/chat' , methods=['POST'])

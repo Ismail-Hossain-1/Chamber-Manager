@@ -3,6 +3,10 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 import marko
 import os
+import smtplib
+s= smtplib.SMTP("localhost")
+print(s.help())
+
 
 load_dotenv()
 
@@ -13,6 +17,7 @@ app = Flask(__name__)
 
 def get_weather(request:str):
     """returns weather information"""
+    
     return {"weather":"34 degree"}
 
 def subtract(a: float, b: float):
