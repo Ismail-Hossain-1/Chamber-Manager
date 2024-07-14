@@ -1,3 +1,5 @@
 env
 .env
 smtpTest.py
+TelegraIntegrationSample.txt
+whatsappTest.py
