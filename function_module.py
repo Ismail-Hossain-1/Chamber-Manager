@@ -36,6 +36,12 @@ def get_current_datetime(Data:str):
     """
     return f"current date time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
+s = smtplib.SMTP('smtp.gmail.com', 587)  # Replace with your SMTP server and port
+s.starttls()
+sender_email= os.getenv("sender_email")
+sender_email_pass= os.getenv("sender_email_Pass")
+s.login(sender_email, sender_email_pass)
+
 def Send_Email(EmailAddress:str, EmailDescription:str):
     """
      Send email to user.
@@ -49,11 +55,7 @@ def Send_Email(EmailAddress:str, EmailDescription:str):
     try:
         print("Emails:", EmailAddress)
         print("Descrip: ", EmailDescription)
-        s = smtplib.SMTP('smtp.gmail.com', 587)  # Replace with your SMTP server and port
-        s.starttls()
-        sender_email= os.getenv("sender_email")
-        sender_email_pass= os.getenv("sender_email_Pass")
-        s.login(sender_email, sender_email_pass)
+       
         
         for dest in EmailAddress:
            

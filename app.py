@@ -21,10 +21,11 @@ WHITELISTED_USERS = [5598314527,]
 bot = telegram.Bot(token=TOKEN)
 
 from typing import List, Dict, Union
-from function_module import (see_all_patients, add_appointment, all_appointments, get_future_appointments,
+from function_module import * 
+"""(see_all_patients, add_appointment, all_appointments, get_future_appointments,
                                     AppointmentsToday, update_appointment, add_patient, make_prescription,
                                     PatientsRange, get_Patient_Name_Id,get_current_datetime, Send_Email,
-                                    getWearher)
+                                    getWearher) """
 
 genai.configure(api_key=os.getenv('GenAPI_KEY'))
 

@@ -3,3 +3,5 @@ env
 smtpTest.py
 TelegraIntegrationSample.txt
 whatsappTest.py
+
+__pycache__/
