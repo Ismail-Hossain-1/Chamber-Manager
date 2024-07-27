@@ -2,12 +2,15 @@ from flask import Flask, request, jsonify, Response, g, render_template
 from dotenv import load_dotenv
 load_dotenv()
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 import mysql.connector
 from uuid import uuid4
 from datetime import datetime
 import os, json
+import google.cloud.texttospeech as tts
+from google.cloud import texttospeech
 from flask_cors import CORS
-
+import base64
 #telegram
 import telegram
 import requests
@@ -15,17 +18,18 @@ import requests
 TOKEN = os.getenv('bot_token')
 TELEGRAM_URL = "https://api.telegram.org/bot{token}".format(token=TOKEN)
 WEBHOOK_URL  = os.getenv('url')
+client_email= os.getenv('client_email'),
+private_key= os.getenv('private_key')
 
 # To retrieve unique user chat ID and group ID, use @IDBot
 WHITELISTED_USERS = [5598314527,]
 bot = telegram.Bot(token=TOKEN)
 
 from typing import List, Dict, Union
-from function_module import * 
-"""(see_all_patients, add_appointment, all_appointments, get_future_appointments,
+from function_module import (see_all_patients, add_appointment, all_appointments, get_future_appointments,
                                     AppointmentsToday, update_appointment, add_patient, make_prescription,
                                     PatientsRange, get_Patient_Name_Id,get_current_datetime, Send_Email,
-                                    getWearher) """
+                                    getWearher)
 
 genai.configure(api_key=os.getenv('GenAPI_KEY'))
 
@@ -135,12 +139,99 @@ def ChatController():
         chat= model.start_chat(history=chat_history, enable_automatic_function_calling=True)
 
         response= chat.send_message(prompt)
-        print(req['doctor']['Name'])
+        #print(req['doctor']['Name'])
         return jsonify(
             response.text.replace("**","")
             )
     except Exception as e:
         return jsonify({'error': str(e)})
+
+
+
+assistant_history=[]
+pvt=os.getenv("GOOGLE_CLOUD_PRIVATE_KEY").replace("\\n","\n")
+#print("Project ID:", os.getenv("GOOGLE_CLOUD_PROJECT_ID"))
+#print("Private Key ID:", os.getenv("GOOGLE_CLOUD_PRIVATE_KEY_ID"))
+#print("Client Email:", os.getenv("GOOGLE_CLOUD_CLIENT_EMAIL"))
+#print("Client ID:", os.getenv("GOOGLE_CLOUD_CLIENT_ID"))
+#print("Client X509 Cert URL:", os.getenv("GOOGLE_CLOUD_CLIENT_X509_CERT_URL"))
+#print(pvt)
+credentials_info={
+     "type": "service_account",
+    "project_id": os.getenv("GOOGLE_CLOUD_PROJECT_ID"),
+     "private_key_id": os.getenv("GOOGLE_CLOUD_PRIVATE_KEY_ID"),
+     "private_key": pvt,
+     "client_email": os.getenv("GOOGLE_CLOUD_CLIENT_EMAIL"),
+     "client_id": os.getenv("GOOGLE_CLOUD_CLIENT_ID"),
+     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+     "token_uri": "https://oauth2.googleapis.com/token",
+     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_x509_cert_url": os.getenv("GOOGLE_CLOUD_CLIENT_X509_CERT_URL"),
+    "universe_domain": "googleapis.com"
+  }
+
+@app.route('/api/assistant', methods=['POST'])
+def AssistantController():
+    """client = texttospeech.TextToSpeechClient(credentials={
+            'client_email': client_email,
+            'private_key': private_key
+        }) """
+        
+  
+    client = texttospeech.TextToSpeechClient.from_service_account_info(credentials_info)
+    try:
+        req = request.get_json()
+        text = req['text']
+        
+        langcode = req['langcode']
+        name = req['name']
+        
+        assistant_history.append({
+            "role": "user",
+            "parts": [
+                
+                {"text": "Mychamber is an application for doctor to manage their chamber"},
+                {"text": f"currently you are serving a doctor called {req['doctor']['Name']} and his other informations are {str(json.dumps(req['doctor']))} "},
+                {"text": text}
+            ]
+        })
+        
+        chat= model.start_chat(history = assistant_history, enable_automatic_function_calling=True)
+
+        response= chat.send_message(text, safety_settings={
+        'HATE': 'BLOCK_NONE',
+        'HARASSMENT': 'BLOCK_NONE',
+        'SEXUAL' : 'BLOCK_NONE',
+        'DANGEROUS' : 'BLOCK_NONE'
+    })
+        ai_text= response.text.replace("**","")
+        #print(ai_text)
+       
+        
+        
+        text_input = texttospeech.SynthesisInput(text=ai_text)
+        voice_params = texttospeech.VoiceSelectionParams(
+        language_code=langcode, name=name
+        )
+        audio_config = texttospeech.AudioConfig(audio_encoding=tts.AudioEncoding.MP3)
+
+        response = client.synthesize_speech(
+        input=text_input,
+        voice=voice_params,
+        audio_config=audio_config,
+      )
+        base64_audio = base64.b64encode(response.audio_content).decode('utf-8')
+        
+        return jsonify({
+            'base64Audio': base64_audio
+        })
+        
+    except Exception as e:
+        print(e)
+        return jsonify({'error': str(e)})
+
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

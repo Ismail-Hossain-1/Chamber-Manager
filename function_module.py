@@ -40,7 +40,13 @@ s = smtplib.SMTP('smtp.gmail.com', 587)  # Replace with your SMTP server and por
 s.starttls()
 sender_email= os.getenv("sender_email")
 sender_email_pass= os.getenv("sender_email_Pass")
-s.login(sender_email, sender_email_pass)
+s.login(sender_email, sender_email_pass) 
+"""
+s.login() :This took me days to solve  a error, passing variable to login inside Send_Main() 
+gives:- Error sending email: (535, b'5.7.8 Username and Password not accepted. For more information, go to\n5.7.8  https://support.google.com/mail/?p=BadCredentials
+it has to be hardcoded or called outside the Send_Mail() function, since i'm calling os.getenv() it had to be
+called outside.
+"""
 
 def Send_Email(EmailAddress:str, EmailDescription:str):
     """
