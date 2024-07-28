@@ -150,12 +150,7 @@ def ChatController():
 
 assistant_history=[]
 pvt=os.getenv("GOOGLE_CLOUD_PRIVATE_KEY").replace("\\n","\n")
-#print("Project ID:", os.getenv("GOOGLE_CLOUD_PROJECT_ID"))
-#print("Private Key ID:", os.getenv("GOOGLE_CLOUD_PRIVATE_KEY_ID"))
-#print("Client Email:", os.getenv("GOOGLE_CLOUD_CLIENT_EMAIL"))
-#print("Client ID:", os.getenv("GOOGLE_CLOUD_CLIENT_ID"))
-#print("Client X509 Cert URL:", os.getenv("GOOGLE_CLOUD_CLIENT_X509_CERT_URL"))
-#print(pvt)
+
 credentials_info={
      "type": "service_account",
     "project_id": os.getenv("GOOGLE_CLOUD_PROJECT_ID"),
@@ -204,10 +199,7 @@ def AssistantController():
         'SEXUAL' : 'BLOCK_NONE',
         'DANGEROUS' : 'BLOCK_NONE'
     })
-        ai_text= response.text.replace("**","")
-        #print(ai_text)
-       
-        
+        ai_text= response.text.replace("**","")    
         
         text_input = texttospeech.SynthesisInput(text=ai_text)
         voice_params = texttospeech.VoiceSelectionParams(
