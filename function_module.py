@@ -18,10 +18,11 @@ import os, json
 load_dotenv()
 
 db_config={
-    "user":os.getenv('USER'),
-    "password": os.getenv('PASSWORD'),
-    "host": os.getenv('HOST'),
-    "database":os.getenv('DATABASE'),
+    "host": os.getenv('DB_INSTANCE'),
+    "user":os.getenv('DB_USER'),
+    "password": os.getenv('DB_PASSWORD'),
+    "database":os.getenv('DB_DATABASE'),
+    "port":os.getenv('DB_PORT'),
     'raise_on_warnings': True
 }
 
@@ -59,6 +60,7 @@ def Send_Email(EmailAddress:str, EmailDescription:str):
     
     """
     try:
+        EmailDescription= EmailDescription +"\n\n Powered by Google's Gemini" 
         print("Emails:", EmailAddress)
         print("Descrip: ", EmailDescription)
        
