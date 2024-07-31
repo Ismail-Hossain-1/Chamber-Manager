@@ -14,6 +14,10 @@ import base64
 #telegram
 import telegram
 import requests
+
+# twilio whatsapp
+from twilio.twiml.messaging_response import MessagingResponse
+from twilio.rest import Client
 # Config
 TOKEN = os.getenv('bot_token')
 TELEGRAM_URL = "https://api.telegram.org/bot{token}".format(token=TOKEN)
@@ -221,6 +225,128 @@ def AssistantController():
     except Exception as e:
         print(e)
         return jsonify({'error': str(e)})
+
+
+#TWILIO WHATSAPP
+
+account_sid = os.getenv('TWILIO_ACCOUNT_SID')
+auth_token = os.getenv('TWILIO_AUTH_TOKEN')
+
+client = Client(account_sid, auth_token)
+
+@app.route('/twiliowebhook', methods=['POST'])
+def TwilioController():
+    data = request.values
+    print("data: ",data)
+    incoming_msg = request.values['Body']
+    phone_number = request.values['WaId']
+
+    print(incoming_msg, "phone: ", phone_number)
+    message = client.messages.create(
+                                from_='whatsapp:+14155238886',                  # With Country Code
+                                body=incoming_msg,
+                                to='whatsapp:' + phone_number                   # With Country Code
+                            )
+    
+    return str(message)
+
+"""@app.route('/twiliowebhook', methods=['GET'])
+def TwilioController():
+    return "hi"""
+
+
+whatsapp_token = os.getenv("WHATSAPP_TOKEN")
+
+# Verify Token defined when configuring the webhook
+verify_token = os.getenv('VERIFY_TOKEN')
+
+def send_whatsapp_message(body, message):
+    value = body["entry"][0]["changes"][0]["value"]
+    phone_number_id = value["metadata"]["phone_number_id"]
+    from_number = value["messages"][0]["from"]
+    headers = {
+        "Authorization": f"Bearer {whatsapp_token}",
+        "Content-Type": "application/json",
+    }
+    url = "https://graph.facebook.com/v20.0/" + phone_number_id + "/messages"
+    data = {
+        "messaging_product": "whatsapp",
+        "to": from_number,
+        "type": "text",
+        "text": {"body": message},
+    }
+    response = requests.post(url, json=data, headers=headers)
+    print(f"whatsapp message response: {response.json()}")
+    response.raise_for_status()
+#whatsapp cloud api
+def handle_whatsapp_message(body):
+    message = body["entry"][0]["changes"][0]["value"]["messages"][0]
+    if message["type"] == "text":
+        message_body = message["text"]["body"]
+    response= "This the Dummy response"
+    send_whatsapp_message(body, response)
+
+
+# handle incoming webhook messages
+def handle_message(request):
+    # Parse Request body in json format
+    body = request.get_json()
+    print(f"request body: {body}")
+
+    try:
+        # info on WhatsApp text message payload:
+        # https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#text-messages
+        if body.get("object"):
+            if (
+                body.get("entry")
+                and body["entry"][0].get("changes")
+                and body["entry"][0]["changes"][0].get("value")
+                and body["entry"][0]["changes"][0]["value"].get("messages")
+                and body["entry"][0]["changes"][0]["value"]["messages"][0]
+            ):
+                handle_whatsapp_message(body)
+            return jsonify({"status": "ok"}), 200
+        else:
+            # if the request is not a WhatsApp API event, return an error
+            return (
+                jsonify({"status": "error", "message": "Not a WhatsApp API event"}),
+                404,
+            )
+    # catch all other errors and return an internal server error
+    except Exception as e:
+        print(f"unknown error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+def verify(request):
+    # Parse params from the webhook verification request
+    mode = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    challenge = request.args.get("hub.challenge")
+    # Check if a token and mode were sent
+    if mode and token:
+        # Check the mode and token sent are correct
+        if mode == "subscribe" and token == verify_token:
+            # Respond with 200 OK and challenge token from the request
+            print("WEBHOOK_VERIFIED")
+            return challenge, 200
+        else:
+            # Responds with '403 Forbidden' if verify tokens do not match
+            print("VERIFICATION_FAILED")
+            return jsonify({"status": "error", "message": "Verification failed"}), 403
+    else:
+        # Responds with '400 Bad Request' if verify tokens do not match
+        print("MISSING_PARAMETER")
+        return jsonify({"status": "error", "message": "Missing parameters"}), 400
+
+
+
+# Accepts POST and GET requests at /webhook endpoint
+@app.route("/webhook", methods=["POST", "GET"])
+def webhook():
+    if request.method == "GET":
+        return verify(request)
+    elif request.method == "POST":
+        return handle_message(request)
 
 
 
