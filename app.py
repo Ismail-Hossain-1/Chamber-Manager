@@ -254,45 +254,91 @@ def TwilioController():
 def TwilioController():
     return "hi"""
 
-
-whatsapp_token = os.getenv("WHATSAPP_TOKEN")
+# Whatsapp access token
+whatsapp_token = os.getenv("ACCESS_TOKEN")
 
 # Verify Token defined when configuring the webhook
 verify_token = os.getenv('VERIFY_TOKEN')
-
+whatsapp_chat_histories = {}
 def send_whatsapp_message(body, message):
-    value = body["entry"][0]["changes"][0]["value"]
-    phone_number_id = value["metadata"]["phone_number_id"]
-    from_number = value["messages"][0]["from"]
-    headers = {
-        "Authorization": f"Bearer {whatsapp_token}",
-        "Content-Type": "application/json",
-    }
-    url = "https://graph.facebook.com/v20.0/" + phone_number_id + "/messages"
-    data = {
-        "messaging_product": "whatsapp",
-        "to": from_number,
-        "type": "text",
-        "text": {"body": message},
-    }
-    response = requests.post(url, json=data, headers=headers)
-    print(f"whatsapp message response: {response.json()}")
-    response.raise_for_status()
+    try:
+        value = body["entry"][0]["changes"][0]["value"]
+        phone_number_id = value["metadata"]["phone_number_id"]
+        from_number = value["messages"][0]["from"]
+        #whatsapp park
+      
+    
+        if from_number not in whatsapp_chat_histories:
+            telegram_chat_histories[from_number]=[]
+    
+        telegram_chat_histories[from_number].append({
+             "role":"user",
+             "parts":[{
+                  "text": message
+             }]
+        })
+        chat= model.start_chat(
+            history=telegram_chat_histories[from_number],
+            enable_automatic_function_calling=True
+             )
+        response= chat.send_message(message)
+    
+        AIchat= response.text.replace("**", "")
+        
+        
+        headers = {
+            "Authorization": f"Bearer {whatsapp_token}",
+            "Content-Type": "application/json",
+        }
+        
+        url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages?access_token={whatsapp_token}"
+        
+        data = {
+            "messaging_product": "whatsapp",
+            "to": from_number,  # Ensure this is the recipient's phone number in E.164 format
+            "type": "text",
+            "text": {
+                "body": AIchat  # Ensure message content is not empty
+            },
+        }
+        
+        response = requests.post(url, json=data, headers=headers)
+        
+        try:
+            response.raise_for_status()
+            print("WhatsApp message response sent")
+        except requests.exceptions.HTTPError as err:
+            print(f"HTTP error occurred: {err}")
+            #if recipient not present in the whatsapp business api allowed list:
+            """ HTTP error occurred: 400 Client Error: Bad Request for url:
+            https://graph.facebook.com/v20.0/384460164747685/messages?access_token={token}
+            Response content: {"error":{"message":"(#131030) Recipient phone number not in allowed list",
+            "type":"OAuthException","code":131030,"error_data":{"messaging_product":"whatsapp",
+            "details":"Recipient phone number not in allowed list: Add recipient phone number to recipient list and try again."},
+            "fbtrace_id":"AFXVb2PxwDZXqmWDadIFvld"}} """
+            
+            print(f"Response content: {response.text}")  # Output response content for debugging
+        except Exception as err:
+            print(f"Other error occurred: {err}")
+
+    except KeyError as e:
+        print(f"Missing expected data in the request body: {e}")
 #whatsapp cloud api
+
+
 def handle_whatsapp_message(body):
+     
     message = body["entry"][0]["changes"][0]["value"]["messages"][0]
     if message["type"] == "text":
         message_body = message["text"]["body"]
-    response= "This the Dummy response"
-    send_whatsapp_message(body, response)
+        send_whatsapp_message(body, message_body)
 
 
 # handle incoming webhook messages
 def handle_message(request):
     # Parse Request body in json format
     body = request.get_json()
-    print(f"request body: {body}")
-
+  
     try:
         # info on WhatsApp text message payload:
         # https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#text-messages
@@ -346,6 +392,7 @@ def webhook():
     if request.method == "GET":
         return verify(request)
     elif request.method == "POST":
+        
         return handle_message(request)
 
 
