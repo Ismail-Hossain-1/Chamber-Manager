@@ -16,8 +16,8 @@ import telegram
 import requests
 
 # twilio whatsapp
-from twilio.twiml.messaging_response import MessagingResponse
-from twilio.rest import Client
+#from twilio.twiml.messaging_response import MessagingResponse
+#from twilio.rest import Client
 # Config
 TOKEN = os.getenv('bot_token')
 TELEGRAM_URL = "https://api.telegram.org/bot{token}".format(token=TOKEN)
@@ -228,7 +228,7 @@ def AssistantController():
 
 
 #TWILIO WHATSAPP
-
+"""
 account_sid = os.getenv('TWILIO_ACCOUNT_SID')
 auth_token = os.getenv('TWILIO_AUTH_TOKEN')
 
@@ -250,9 +250,10 @@ def TwilioController():
     
     return str(message)
 
-"""@app.route('/twiliowebhook', methods=['GET'])
+@app.route('/twiliowebhook', methods=['GET'])
 def TwilioController():
-    return "hi"""
+    return "hi"
+"""
 
 # Whatsapp access token
 whatsapp_token = os.getenv("ACCESS_TOKEN")
@@ -266,8 +267,6 @@ def send_whatsapp_message(body, message):
         phone_number_id = value["metadata"]["phone_number_id"]
         from_number = value["messages"][0]["from"]
         #whatsapp park
-      
-    
         if from_number not in whatsapp_chat_histories:
             telegram_chat_histories[from_number]=[]
     
