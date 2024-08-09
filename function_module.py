@@ -11,6 +11,8 @@ from flask_cors import CORS
 
 from typing import List, Dict, Union
 import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 import os, json
 
 
@@ -18,11 +20,11 @@ import os, json
 load_dotenv()
 
 db_config={
-    "host": os.getenv('DB_INSTANCE'),
-    "user":os.getenv('DB_USER'),
-    "password": os.getenv('DB_PASSWORD'),
-    "database":os.getenv('DB_DATABASE'),
-    "port":os.getenv('DB_PORT'),
+    "host": os.getenv('HOST'),
+    "user":os.getenv('USER'),
+    "password": os.getenv('PASSWORD'),
+    "database":os.getenv('DATABASE'),
+    #"port":os.getenv('DB_PORT'),
     'raise_on_warnings': True
 }
 
@@ -38,10 +40,10 @@ def get_current_datetime(Data:str):
     return f"current date time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
 s = smtplib.SMTP('smtp.gmail.com', 587)  # Replace with your SMTP server and port
-s.starttls()
+
 sender_email= os.getenv("sender_email")
 sender_email_pass= os.getenv("sender_email_Pass")
-s.login(sender_email, sender_email_pass) 
+
 """
 s.login() :This took me days to solve  a error, passing variable to login inside Send_Main() 
 gives:- Error sending email: (535, b'5.7.8 Username and Password not accepted. For more information, go to\n5.7.8  https://support.google.com/mail/?p=BadCredentials
@@ -49,26 +51,75 @@ it has to be hardcoded or called outside the Send_Mail() function, since i'm cal
 called outside.
 """
 
-def Send_Email(EmailAddress:str, EmailDescription:str):
+def Send_Email(EmailAddress:str, EmailDescription:str, EmailSubject:str):
     """
      Send email to user.
     Parameters:
     EmailAddress (str): python List of Patient Email address. Emails should be in this format ["test@gmail.com"] wrapped no extra symbol.
     EmailDescription (str):A suitable description
+    EmailSubject: set a appropriate subject for the email
     Returns:
     String : Confirmation if the email has been sent or not
     
     """
     try:
-        EmailDescription= EmailDescription +"\n\n Powered by Google's Gemini" 
+        s.starttls()
+        s.login(sender_email, sender_email_pass) 
+        EmailDescription= EmailDescription  
         print("Emails:", EmailAddress)
-        print("Descrip: ", EmailDescription)
-       
+        #print("Descrip: ", EmailDescription)
         
         for dest in EmailAddress:
-           
-            s.sendmail(sender_email, dest, str(EmailDescription))
-            print("Email sent to:", dest)
+             html_content = """
+            <html>
+            <head>
+                <style>
+                    body {{
+                        font-family: Arial, sans-serif;
+                        color: #333;
+                    }}
+                    .container {{
+                        width: 80%;
+                        margin: 0 auto;
+                        padding: 20px;
+                        background-color: #f9f9f9;
+                        border: 1px solid #ddd;
+                        border-radius: 5px;
+                    }}
+                    h1 {{
+                        color: #2c3e50;
+                    }}
+                    p {{
+                        font-size: 16px;
+                    }}
+                    .footer {{
+                        margin-top: 20px;
+                        font-size: 14px;
+                        color: #888;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>Important Update</h1>
+                    <p>{}</p>
+                    <div class="footer">
+                        <p>Powered by Google's Gemini</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """.format(EmailDescription)
+
+            # Create MIMEText object for HTML content
+             msg = MIMEMultipart()
+             msg['Subject'] = EmailSubject  # Customize the subject line as needed
+             msg['From'] = sender_email
+             msg['To'] = dest
+             msg.attach(MIMEText(html_content, 'html'))
+            # Send the email
+             s.sendmail(sender_email, dest, msg.as_string())
+             print("Email sent to:", dest)
             
         
         s.quit()
@@ -76,12 +127,7 @@ def Send_Email(EmailAddress:str, EmailDescription:str):
     
     except Exception as e:
         print("Error sending email:", str(e))
-        return "Message not sent"
-
-sender_email= os.getenv("sender_email")
-sender_email_pass= os.getenv("sender_email_Pass")
-
-#print(sender_email, sender_email_pass)
+        return "Message not sent because of error"
 
 def get_db_connection():
     """ It is for connecting with the database and then make queries , it is a must for all operations"""
@@ -91,6 +137,39 @@ def get_db_connection():
     except mysql.connector.Error as e:
         print(f'Error connecting to MySQL: {e}')
         return None
+
+
+DoctorID= "None"
+Name ="None"
+
+def GetDoctor(DoctorId:str):
+    """
+    description:
+            Call this function whenever the user gives a DoctorId.
+            For getting Name of Doctor using the DoctorId given by the user.          
+    Parameters:
+         DoctorId(str): The ID of the doctor given by the user.
+        
+    Returns:
+           - String: A string with Doctor Name
+    """
+    try:
+        DoctorID= DoctorId
+        conn= get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT Name FROM tbl_doctors WHERE DoctorID = %s ", (DoctorID,))
+        rows = cursor.fetchall()
+        print(rows[0])
+        Name= rows[0]
+        print(Name)
+        cursor.close()
+        conn.close()
+        return str(rows)
+    except Exception as e:
+        print(f"Error fetching patients: {e}")
+        return "Error"
+    
+    
 
 def get_Patient_Name_Id(PatientName: str, DoctorId: str)->str:
     """ 
@@ -453,7 +532,7 @@ def AppointmentsToday(DoctorID:str):
         cursor = conn.cursor(dictionary=True)
         
         query = """
-        SELECT p.Name, p.Address, p.Age, p.Email a.*
+        SELECT p.Name, p.Address, p.Age, p.Email, a.*
         FROM tbl_patients p
         INNER JOIN tbl_appointments AS a ON p.PatientID = a.PatientID
         WHERE p.DoctorID = %s AND DATE(a.AppointmentDateTime) = CURDATE()
@@ -525,15 +604,16 @@ def PatientsRange(DoctorID: str):
         return None
 
 
-
-
-
-
-
-
 def getWearher(weather: str):
            """ To get the current weather """
            #print(doctor)
            return '34 degree'
  
+ 
+def turnOff_Lights(description: str):
+    """
+    Description:
+        When the user leaves the Chamber Turn of all the room lights.
+    """
+    return "Lights switched off"
 

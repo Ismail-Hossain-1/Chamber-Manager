@@ -30,10 +30,14 @@ WHITELISTED_USERS = [5598314527,]
 bot = telegram.Bot(token=TOKEN)
 
 from typing import List, Dict, Union
-from function_module import (see_all_patients, add_appointment, all_appointments, get_future_appointments,
+
+   
+
+
+from function_module import (GetDoctor,see_all_patients, add_appointment, all_appointments, get_future_appointments,
                                     AppointmentsToday, update_appointment, add_patient, make_prescription,
                                     PatientsRange, get_Patient_Name_Id,get_current_datetime, Send_Email,
-                                    getWearher)
+                                    getWearher, turnOff_Lights)
 
 genai.configure(api_key=os.getenv('GenAPI_KEY'))
 
@@ -43,10 +47,10 @@ CORS(app)
 
 model= genai.GenerativeModel(model_name='gemini-1.5-flash',
                              system_instruction="Your name is Gemi an AI assistant for MyChamber application",
-                             tools=[see_all_patients, add_appointment, all_appointments, get_future_appointments,
+                             tools=[GetDoctor, see_all_patients, add_appointment, all_appointments, get_future_appointments,
                                     AppointmentsToday, update_appointment, add_patient, make_prescription,
                                     PatientsRange, get_Patient_Name_Id,get_current_datetime, Send_Email,
-                                    getWearher])
+                                    getWearher, turnOff_Lights])
 
 
 telegram_chat_histories = {}
@@ -66,7 +70,8 @@ def sendmessage(chat_id, prompt):
     telegram_chat_histories[chat_id].append({
         "role":"user",
         "parts":[{
-            "text": message
+            "text": message,
+            "text" :"remember the DoctorId given by the user to use it for queries where required"
         }]
     })
     chat= model.start_chat(
@@ -93,9 +98,7 @@ def sendmessage(chat_id, prompt):
 def index():
     if(request.method == "POST"):
         response = request.get_json()
-        print(response)
-        
-       
+        #print(response)
         # To run only if 'message' exist in response.
         if 'message' in response:
 
@@ -171,12 +174,6 @@ credentials_info={
 
 @app.route('/api/assistant', methods=['POST'])
 def AssistantController():
-    """client = texttospeech.TextToSpeechClient(credentials={
-            'client_email': client_email,
-            'private_key': private_key
-        }) """
-        
-  
     client = texttospeech.TextToSpeechClient.from_service_account_info(credentials_info)
     try:
         req = request.get_json()
@@ -257,7 +254,7 @@ def TwilioController():
 
 # Whatsapp access token
 whatsapp_token = os.getenv("ACCESS_TOKEN")
-
+print(whatsapp_token)
 # Verify Token defined when configuring the webhook
 verify_token = os.getenv('VERIFY_TOKEN')
 whatsapp_chat_histories = {}
@@ -268,16 +265,18 @@ def send_whatsapp_message(body, message):
         from_number = value["messages"][0]["from"]
         #whatsapp park
         if from_number not in whatsapp_chat_histories:
-            telegram_chat_histories[from_number]=[]
+            whatsapp_chat_histories[from_number]=[]
     
-        telegram_chat_histories[from_number].append({
+       
+        whatsapp_chat_histories[from_number].append({
              "role":"user",
              "parts":[{
                   "text": message
+#                 "text" : f"The DoctorId given by the user:{Doctorid} ane name is {name}"
              }]
         })
         chat= model.start_chat(
-            history=telegram_chat_histories[from_number],
+            history=whatsapp_chat_histories[from_number],
             enable_automatic_function_calling=True
              )
         response= chat.send_message(message)
@@ -324,7 +323,6 @@ def send_whatsapp_message(body, message):
         print(f"Missing expected data in the request body: {e}")
 #whatsapp cloud api
 
-
 def handle_whatsapp_message(body):
      
     message = body["entry"][0]["changes"][0]["value"]["messages"][0]
@@ -332,15 +330,12 @@ def handle_whatsapp_message(body):
         message_body = message["text"]["body"]
         send_whatsapp_message(body, message_body)
 
-
 # handle incoming webhook messages
 def handle_message(request):
     # Parse Request body in json format
     body = request.get_json()
   
     try:
-        # info on WhatsApp text message payload:
-        # https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/payload-examples#text-messages
         if body.get("object"):
             if (
                 body.get("entry")
@@ -352,26 +347,21 @@ def handle_message(request):
                 handle_whatsapp_message(body)
             return jsonify({"status": "ok"}), 200
         else:
-            # if the request is not a WhatsApp API event, return an error
             return (
                 jsonify({"status": "error", "message": "Not a WhatsApp API event"}),
                 404,
             )
-    # catch all other errors and return an internal server error
     except Exception as e:
         print(f"unknown error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 def verify(request):
-    # Parse params from the webhook verification request
     mode = request.args.get("hub.mode")
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
     # Check if a token and mode were sent
     if mode and token:
-        # Check the mode and token sent are correct
         if mode == "subscribe" and token == verify_token:
-            # Respond with 200 OK and challenge token from the request
             print("WEBHOOK_VERIFIED")
             return challenge, 200
         else:
@@ -382,8 +372,6 @@ def verify(request):
         # Responds with '400 Bad Request' if verify tokens do not match
         print("MISSING_PARAMETER")
         return jsonify({"status": "error", "message": "Missing parameters"}), 400
-
-
 
 # Accepts POST and GET requests at /webhook endpoint
 @app.route("/webhook", methods=["POST", "GET"])
