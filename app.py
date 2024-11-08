@@ -64,8 +64,8 @@ def sendmessage(chat_id, prompt):
     
     
 
-    if chat_id not in telegram_chat_histories:
-        telegram_chat_histories[chat_id]=[]
+    # if chat_id not in telegram_chat_histories:
+    #     telegram_chat_histories[chat_id]=[]
     
     telegram_chat_histories.append({
         "role":"user",
@@ -268,7 +268,7 @@ def send_whatsapp_message(body, message):
             whatsapp_chat_histories=[]
     
        
-        whatsapp_chat_histories[from_number].append({
+        whatsapp_chat_histories.append({
              "role":"user",
              "parts":[{
                   "text": message
