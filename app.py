@@ -265,8 +265,8 @@ def send_whatsapp_message(body, message):
         phone_number_id = value["metadata"]["phone_number_id"]
         from_number = value["messages"][0]["from"]
         #whatsapp park
-        if from_number not in whatsapp_chat_histories:
-            whatsapp_chat_histories=[]
+        # if from_number not in whatsapp_chat_histories:
+        #     whatsapp_chat_histories=[]
     
        
         whatsapp_chat_histories.append({
