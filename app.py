@@ -67,6 +67,7 @@ def sendmessage(chat_id, prompt):
     # if chat_id not in telegram_chat_histories:
     #     telegram_chat_histories[chat_id]=[]
     
+    
     telegram_chat_histories.append({
         "role":"user",
         "parts":[{
@@ -75,7 +76,7 @@ def sendmessage(chat_id, prompt):
         }]
     })
     chat= model.start_chat(
-        history=telegram_chat_histories[chat_id],
+        history=telegram_chat_histories,
         enable_automatic_function_calling=True
         )
     response= chat.send_message(message)
