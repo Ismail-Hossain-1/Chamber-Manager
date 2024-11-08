@@ -46,14 +46,14 @@ app = Flask(__name__)
 CORS(app)
 
 model= genai.GenerativeModel(model_name='gemini-1.5-flash',
-                             system_instruction="Your name is Gemi an AI assistant for MyChamber application",
+                             system_instruction="Your name is Gemi.You are an AI assistant for MyChamber application. My chamber is a platform for doctors to manage their chamber. Use the chat history for better response",
                              tools=[GetDoctor, see_all_patients, add_appointment, all_appointments, get_future_appointments,
                                     AppointmentsToday, update_appointment, add_patient, make_prescription,
                                     PatientsRange, get_Patient_Name_Id,get_current_datetime, Send_Email,
                                     getWearher, turnOff_Lights])
 
 
-telegram_chat_histories = {}
+telegram_chat_histories = []
 
 def sendmessage(chat_id, prompt):
     # As the bot is searchable and visble by public.
@@ -67,11 +67,11 @@ def sendmessage(chat_id, prompt):
     if chat_id not in telegram_chat_histories:
         telegram_chat_histories[chat_id]=[]
     
-    telegram_chat_histories[chat_id].append({
+    telegram_chat_histories.append({
         "role":"user",
         "parts":[{
             "text": message,
-            "text" :"remember the DoctorId given by the user to use it for queries where required"
+            # "text" :"remember the DoctorId given by the user to use it for queries where required"
         }]
     })
     chat= model.start_chat(
@@ -138,7 +138,7 @@ def ChatController():
             "role": "user",
             "parts": [
                 {"text": prompt},
-                {"text": "Mychamber is an application for doctor to manage their chamber"},
+                # {"text": "Mychamber is an application for doctor to manage their chamber"},
                 {"text": f"currently you are serving a doctor called {req['doctor']['Name']} and his other informations are {str(json.dumps(req['doctor']))} "}
             ]
         })
@@ -186,7 +186,7 @@ def AssistantController():
             "role": "user",
             "parts": [
                 
-                {"text": "Mychamber is an application for doctor to manage their chamber"},
+                # {"text": "Mychamber is an application for doctor to manage their chamber"},
                 {"text": f"currently you are serving a doctor called {req['doctor']['Name']} and his other informations are {str(json.dumps(req['doctor']))} "},
                 {"text": text}
             ]
@@ -257,7 +257,7 @@ whatsapp_token = os.getenv("ACCESS_TOKEN")
 print(whatsapp_token)
 # Verify Token defined when configuring the webhook
 verify_token = os.getenv('VERIFY_TOKEN')
-whatsapp_chat_histories = {}
+whatsapp_chat_histories = []
 def send_whatsapp_message(body, message):
     try:
         value = body["entry"][0]["changes"][0]["value"]
@@ -265,7 +265,7 @@ def send_whatsapp_message(body, message):
         from_number = value["messages"][0]["from"]
         #whatsapp park
         if from_number not in whatsapp_chat_histories:
-            whatsapp_chat_histories[from_number]=[]
+            whatsapp_chat_histories=[]
     
        
         whatsapp_chat_histories[from_number].append({
@@ -276,7 +276,7 @@ def send_whatsapp_message(body, message):
              }]
         })
         chat= model.start_chat(
-            history=whatsapp_chat_histories[from_number],
+            history=whatsapp_chat_histories,
             enable_automatic_function_calling=True
              )
         response= chat.send_message(message)
